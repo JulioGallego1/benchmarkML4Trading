@@ -31,10 +31,10 @@ seeds:
 
 models:
   rf:
-    n_estimators: [200]
+    n_estimators: [150, 200]
     max_depth: [null, 10]
     max_features: ["sqrt"]
-    min_samples_leaf: [1, 2]
+    min_samples_leaf: [1, 5]
 
   lstm:
     hidden_size: [64, 128]
