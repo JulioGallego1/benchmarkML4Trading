@@ -6,8 +6,8 @@ regimes:
 
 horizons:
   - 10    # 2w
-  - 21    # 1m
-  - 63    # 3m
+#  - 21    # 1m
+#  - 63    # 3m
 
 context_lengths:
   - 32
@@ -24,7 +24,7 @@ steps:       # only used when strategy = recursive
 
 training_mode:
   - per_ticker
-  - pooled
+ # - pooled
 
 seeds:
   - 2024
@@ -49,6 +49,6 @@ models:
     num_hidden_layers: [2, 3]
     patch_length: [16]
     patch_stride: [8]
-    dropout: [0.2]
-    lr: [0.0015, 0.0003]
+    dropout: [0.25]
+    lr: [0.0015]
     use_revin: [true]
