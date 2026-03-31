@@ -23,8 +23,8 @@ steps:       # only used when strategy = recursive
   - 32
 
 training_mode:
-  - per_ticker
- # - pooled
+  #- per_ticker
+  - pooled
 
 seeds:
   - 2024
