@@ -1,0 +1,18 @@
+# Data (do not version control)
+data/raw/
+data/processed/
+*.parquet
+
+# Outputs and artifacts (should not be version controlled)
+runs/
+logs/
+
+# Local virtual environments
+.venv/
+.env/
+
+#PyCache and compiled Python files
+__pycache__/
+*.pyc
+
+analysis/

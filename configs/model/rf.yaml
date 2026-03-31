@@ -1,0 +1,5 @@
+model: rf
+n_estimators: 180
+max_features: sqrt
+max_depth: null
+min_samples_leaf: 1

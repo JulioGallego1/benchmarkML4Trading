@@ -1,0 +1,54 @@
+# make_grid.py reads this to generate grid.jsonl to run a set of experiments
+
+regimes:
+  - bear
+  - bull
+
+horizons:
+  - 10    # 2w
+  - 21    # 1m
+  - 63    # 3m
+
+context_lengths:
+  - 32
+  - 48
+  - 96
+
+strategies:
+  - mimo
+  #- recursive
+
+steps:       # only used when strategy = recursive
+  - 16
+  #- 32
+
+training_mode:
+  - per_ticker
+  - pooled
+
+seeds:
+  - 2024
+
+models:
+  rf:
+    n_estimators: [200]
+    max_depth: [null, 10]
+    max_features: ["sqrt"]
+    min_samples_leaf: [1, 2]
+
+  lstm:
+    hidden_size: [64, 128]
+    num_layers: [1, 2]
+    dropout: [0.1]
+    lr: [0.001]
+    batch_size: [32]
+
+  patchtst:
+    d_model: [64, 128]
+    num_attention_heads: [4, 8]
+    num_hidden_layers: [2, 3]
+    patch_length: [16]
+    patch_stride: [8]
+    dropout: [0.2]
+    lr: [0.0015, 0.0003]
+    use_revin: [true]
