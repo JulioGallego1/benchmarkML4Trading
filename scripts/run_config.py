@@ -23,7 +23,7 @@ subprocess.run(
         "--L",        str(cfg["L"]),
         "--H",        str(cfg["H"]),
         "--strategy", cfg.get("strategy", "mimo"),
-        "--training_mode",  cfg.get("training_mode", "per_ticker"),
+        "--training-mode",  cfg.get("training_mode", "per_ticker"),
         "--step",     str(cfg.get("step", 0)),
         "--seed",     str(cfg.get("seed", 2024)),
         "--hparams",  json.dumps(hparams),
