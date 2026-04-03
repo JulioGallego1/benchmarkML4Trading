@@ -5,7 +5,7 @@ regimes:
   - bull
 
 horizons:
-  #- 10    # 2w
+  - 10    # 2w
   - 21    # 1m
   - 63    # 3m
 
@@ -15,16 +15,16 @@ context_lengths:
   - 96
 
 strategies:
-  #- mimo
-  - recursive
+  - mimo
+  #- recursive
 
 steps:       # only used when strategy = recursive
   - 16
   - 32
 
 training_mode:
-  - per_ticker
-  #- pooled
+  #- per_ticker
+  - pooled
 
 seeds:
   - 2024
@@ -38,15 +38,15 @@ models:
 
   lstm:
     hidden_size: [64, 128]
-    num_layers: [1, 2]
+    num_layers: [ 2]
     dropout: [0.1]
     lr: [0.001]
     batch_size: [32]
 
   patchtst:
-    d_model: [64, 128]
+    d_model: [64]
     num_attention_heads: [4, 8]
-    num_hidden_layers: [2, 3]
+    num_hidden_layers: [3]
     patch_length: [16]
     patch_stride: [8]
     dropout: [0.25]
