@@ -5,8 +5,8 @@ regimes:
   - bull
 
 horizons:
-  - 10    # 2w
-  #- 21    # 1m
+  #- 10    # 2w
+  - 21    # 1m
   #- 63    # 3m
 
 context_lengths:
@@ -20,7 +20,7 @@ strategies:
 
 steps:       # only used when strategy = recursive
   - 1
-  - 2
+  - 3
   #- 16
   #- 32
 
