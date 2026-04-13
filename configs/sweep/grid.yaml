@@ -6,8 +6,8 @@ regimes:
 
 horizons:
   #- 10    # 2w
-  - 21    # 1m
-  #- 63    # 3m
+  #- 21    # 1m
+  - 63    # 3m
 
 context_lengths:
   - 32
@@ -19,8 +19,8 @@ strategies:
   - recursive
 
 steps:       # only used when strategy = recursive
-  - 1
-  - 3
+  - 6
+  #- 3
   #- 16
   #- 32
 
@@ -47,10 +47,10 @@ models:
   patchtst:
     d_model: [32, 64]
     num_attention_heads: [4, 8]
-    num_hidden_layers: [2, 3]
+    num_hidden_layers: [3]
     ffn_dim: [128, 256]
     patch_length: [8]
     patch_stride: [4]
-    dropout: [0.2, 0.3]
+    dropout: [0.25]
     lr: [0.001]
     use_revin: [true]
