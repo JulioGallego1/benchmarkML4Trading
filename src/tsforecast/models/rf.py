@@ -24,24 +24,6 @@ class RandomForestModel(BaseModel):
         self.min_samples_leaf = min_samples_leaf
         self.random_state = random_state
         self._model: RandomForestRegressor | None = None
-        self._has_ticker_feature: bool = False
-        self._known_ticker_ids: set[int] | None = None  # IDs seen at fit
-
-    def _build_X(self, X: np.ndarray, ticker_ids: np.ndarray | None) -> np.ndarray:
-        if ticker_ids is None:
-            return X
-        ids = np.asarray(ticker_ids).ravel()
-        if ids.shape[0] != X.shape[0]:
-            raise ValueError(
-                f"ticker_ids must have {X.shape[0]} samples, got {ids.shape[0]}."
-            )
-        unseen = set(ids.tolist()) - self._known_ticker_ids
-        if unseen:
-            raise ValueError(
-                f"Unknown ticker IDs: {sorted(unseen)}. "
-                f"Known: {sorted(self._known_ticker_ids)}."
-            )
-        return np.concatenate([X, ids.reshape(-1, 1).astype(np.float32)], axis=1)
 
     # BaseModel interface
 
@@ -51,8 +33,6 @@ class RandomForestModel(BaseModel):
         Y_train: np.ndarray,
         X_val: np.ndarray | None = None,
         Y_val: np.ndarray | None = None,
-        ticker_ids_train: np.ndarray | None = None,
-        ticker_ids_val: np.ndarray | None = None,
     ) -> None:
         # RF has no iterative training loop, so validation data is not needed
         # for early stopping. We concatenate it with training data to maximize
@@ -60,21 +40,9 @@ class RandomForestModel(BaseModel):
         if X_val is not None and Y_val is not None:
             X_train = np.concatenate([X_train, X_val], axis=0)
             Y_train = np.concatenate([Y_train, Y_val], axis=0)
-            if ticker_ids_train is not None and ticker_ids_val is not None:
-                ticker_ids_train = np.concatenate([ticker_ids_train, ticker_ids_val], axis=0)
 
         self._validate_init_params()
         self._validate_fit_inputs(X_train, Y_train)
-
-        if ticker_ids_train is not None:
-            ids = np.asarray(ticker_ids_train).ravel()
-            self._known_ticker_ids = set(ids.tolist())
-            self._has_ticker_feature = True
-        else:
-            self._known_ticker_ids = None
-            self._has_ticker_feature = False
-
-        X_fit = self._build_X(X_train, ticker_ids_train)
 
         self._model = RandomForestRegressor(
             n_estimators=self.n_estimators,
@@ -84,9 +52,9 @@ class RandomForestModel(BaseModel):
             random_state=self.random_state,
             n_jobs=-1,
         )
-        self._model.fit(X_fit, Y_train)
+        self._model.fit(X_train, Y_train)
 
-    def predict(self, X: np.ndarray, ticker_ids: np.ndarray | None = None) -> np.ndarray:
+    def predict(self, X: np.ndarray) -> np.ndarray:
         if self._model is None:
             raise RuntimeError("Model has not been fitted yet. Call fit() first.")
 
@@ -96,16 +64,7 @@ class RandomForestModel(BaseModel):
         if X.shape[0] == 0:
             raise ValueError("X must contain at least one sample.")
 
-        if self._has_ticker_feature and ticker_ids is None:
-            raise ValueError(
-                "This model was trained with ticker information; ticker_ids must be provided."
-            )
-        if not self._has_ticker_feature and ticker_ids is not None:
-            raise ValueError(
-                "This model was trained without ticker information; ticker_ids must be None."
-            )
-
-        return self._model.predict(self._build_X(X, ticker_ids)).astype(np.float32)
+        return self._model.predict(X).astype(np.float32)
 
     def save(self, path: Path) -> None:
         if self._model is None:
@@ -122,8 +81,6 @@ class RandomForestModel(BaseModel):
         joblib.dump(
             {
                 "model": self._model,
-                "has_ticker_feature": self._has_ticker_feature,
-                "known_ticker_ids": self._known_ticker_ids,
             },
             dest,
         )
@@ -137,15 +94,6 @@ class RandomForestModel(BaseModel):
         if not isinstance(saved, dict) or "model" not in saved:
             raise TypeError("Saved file is not in the expected format.")
         fitted = saved["model"]
-        has_ticker_feature = saved["has_ticker_feature"]
-        # backward compat: checkpoints saved before the ordinal encoding update
-        # stored ticker_categories (ndarray); convert to a set of ints.
-        if "known_ticker_ids" in saved:
-            known_ticker_ids = saved["known_ticker_ids"]
-        elif "ticker_categories" in saved:
-            known_ticker_ids = set(saved["ticker_categories"].tolist()) if saved["ticker_categories"] is not None else None
-        else:
-            known_ticker_ids = None
 
         if not isinstance(fitted, RandomForestRegressor):
             raise TypeError(
@@ -160,8 +108,6 @@ class RandomForestModel(BaseModel):
             random_state=fitted.random_state,
         )
         instance._model = fitted
-        instance._has_ticker_feature = has_ticker_feature
-        instance._known_ticker_ids = known_ticker_ids
         return instance
 
     # Validation helpers

@@ -8,16 +8,18 @@ def make_df(n=1200):
     return pd.DataFrame({"Date": dates, "Close": np.random.rand(n)})
 
 def test_non_overlapping_splits():
+    context_length = 32
     df = make_df()
-    splits = make_time_splits(df, test_start="2022-01-01", test_days=63, val_days=63, context_length=32)
+    splits = make_time_splits(df, test_start="2022-01-01", test_days=63, val_days=63, context_length=context_length)
     train_end = splits["train"][1]
     val_start = splits["val"][0]
     val_end = splits["val"][1]
     test_start = splits["test"][0]
-    # Train ends before val starts (val_start includes context overlap before val window)
-    # The actual prediction portion of val starts at val_start + context_length
-    assert train_end <= val_start + 32  # train ends where val prediction starts (minus context)
-    assert val_end <= test_start + 32   # val ends before test prediction starts (minus context)
+    # train end IS the context start of val (identical by construction)
+    assert train_end == val_start
+    # val prediction window ends exactly where test prediction window begins
+    # val[1] == test_start_idx, test[0] == test_start_idx - context_length
+    assert val_end == test_start + context_length
 
 def test_context_preserved_in_val():
     df = make_df()

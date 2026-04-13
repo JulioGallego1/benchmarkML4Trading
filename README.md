@@ -23,7 +23,7 @@ Each experiment is an independent, reproducible run that:
 
 1. Loads daily close prices from pre-downloaded parquet files.
 2. Creates sliding windows (context window L → forecast horizon H) on raw prices.
-3. Trains a model in **pooled** mode (one shared model across all tickers) or **per-ticker** mode.
+3. Trains a separate model for each ticker independently.
 4. Evaluates on a held-out test set and computes 5 metrics (MAE, RMSE, MAPE, SMAPE, directional accuracy).
 5. Saves metrics, predictions, plots, model checkpoint, and config to `runs/<run_id>/`.
 
@@ -39,7 +39,6 @@ Sweeps are generated from `configs/sweep/grid.yaml` as a Cartesian product of re
 | **Horizon H** | 10 (≈2w), 21 (≈1m), 63 (≈3m) |
 | **Context length L** | 32, 48, 96 days |
 | **Forecasting strategy** | `mimo` (direct multi-output), `recursive` (iterative with block step) |
-| **Training mode** | `pooled` (one shared model), `per_ticker` (independent model per ticker) |
 | **Model** | `rf`, `lstm`, `patchtst` |
 
 **MIMO** — the model maps L context steps directly to an H-step forecast vector in one shot.
@@ -155,12 +154,8 @@ Files are saved as `data/raw/<ticker>.parquet`.
 ### Step 3 — Run a single experiment
 
 ```bash
-# MIMO strategy, per-ticker mode (defaults)
+# MIMO strategy (default)
 python -m tsforecast.cli.train --model rf --regime bear --L 96 --H 21
-
-# Pooled mode
-python -m tsforecast.cli.train --model rf --regime bear --L 96 --H 21 \
-  --training-mode pooled
 
 # Recursive strategy
 python -m tsforecast.cli.train --model lstm --regime bear --L 96 --H 63 \
@@ -181,7 +176,7 @@ python -m tsforecast.cli.train --model rf --regime bear --L 96 --H 21 \
 | `--H` | Yes | — | Forecast horizon in trading days |
 | `--strategy` | No | `mimo` | `mimo` or `recursive` |
 | `--step` | No | `16` | Block size for recursive strategy |
-| `--training-mode` | No | `per_ticker` | `pooled` or `per_ticker` |
+| `--training-mode` | No | `per_ticker` | Only `per_ticker` is supported |
 | `--seed` | No | from yaml | Random seed override |
 | `--hparams` | No | `None` | JSON string of hyperparameter overrides |
 | `--data-dir` | No | `data/raw` | Directory with `.parquet` files |
@@ -196,16 +191,14 @@ runs/RF_mimo_bear_L96_H21_per_ticker_<timestamp>/
 ├── config.yaml
 ├── metrics.json
 ├── metrics_global.csv
-├── predictions_detailed.csv
 ├── training_curves.png         # LSTM and PatchTST only
-├── model/                      # pooled mode only
 └── tickers/<TICKER>/
     ├── plot.png
     ├── plot_returns.png
-    ├── training_curves.png     # LSTM and PatchTST, per-ticker mode only
-    ├── predictions.csv         # per-ticker mode only
-    ├── metrics.csv             # per-ticker mode only
-    └── model/                  # per-ticker mode only
+    ├── training_curves.png     # LSTM and PatchTST only
+    ├── predictions.csv
+    ├── metrics.csv
+    └── model/
 ```
 
 ### Step 5 — Aggregate results
@@ -225,9 +218,9 @@ print(df.sort_values("mae"))
 Shared training settings applied to all models:
 
 ```yaml
-max_epochs: 100
+max_epochs: 250
 batch_size: 32
-patience: 10
+patience: 25
 seed: 2024
 ```
 
@@ -239,12 +232,12 @@ Defines the date boundaries for each regime:
 regimes:
   bear:
     test_start: "2022-03-11"
-    val_days: 126
-    test_days: 126
+    val_days: 252
+    test_days: 252
   bull:
     test_start: "2023-01-06"
-    val_days: 252
-    test_days: 126
+    val_days: 294
+    test_days: 252
 ```
 
 ### `configs/sweep/grid.yaml`
@@ -258,7 +251,7 @@ context_lengths: [32, 48, 96]
 strategies: [mimo]
 steps: [16]       # block sizes for recursive strategy only
 seeds: [2024]
-training_mode: [per_ticker, pooled]
+training_mode: [per_ticker]
 
 models:
   rf:
@@ -303,14 +296,12 @@ python -m tsforecast.cli.train --model rf --regime bear --L 96 --H 21 \
 | `config.yaml` | Full merged config for the run |
 | `metrics.json` | `{mae, rmse, mape, smape, directional_accuracy}` |
 | `metrics_global.csv` | Same metrics in CSV format |
-| `predictions_detailed.csv` | Per-window predictions (pooled mode) |
 | `training_curves.png` | Train/val loss curves (LSTM and PatchTST only) |
 | `tickers/<T>/plot.png` | Forecast plot for ticker T |
 | `tickers/<T>/plot_returns.png` | Return plot for ticker T |
-| `tickers/<T>/predictions.csv` | Per-ticker predictions (per-ticker mode) |
-| `tickers/<T>/metrics.csv` | Per-ticker metrics (per-ticker mode) |
-| `model/` | Model checkpoint (pooled mode) |
-| `tickers/<T>/model/` | Model checkpoint (per-ticker mode) |
+| `tickers/<T>/predictions.csv` | Per-ticker predictions |
+| `tickers/<T>/metrics.csv` | Per-ticker metrics |
+| `tickers/<T>/model/` | Model checkpoint |
 | `logs.txt` | Training log |
 
 ---
@@ -397,7 +388,7 @@ pytest tests/
 | `test_windows.py` | Window shapes, no data leakage, anchor values, dtype |
 | `test_splits.py` | Train/val/test non-overlap, context boundary preservation |
 | `test_metrics.py` | MAE/RMSE/MAPE/SMAPE/directional accuracy against known inputs |
-| `test_models_smoke.py` | Fit + predict + save + load for RF, LSTM, PatchTST |
+| `test_models_smoke.py` | Fit + predict + save + load for RF, LSTM, PatchTST; `_LSTMNet` forward pass |
 | `test_recursive.py` | Block decomposition, prediction shape, no future leakage |
 | `test_cache_key.py` | Cache key uniqueness and round-trip load |
 

@@ -153,7 +153,7 @@ def load_all_runs(runs_dir: str = "runs") -> pd.DataFrame:
             "L":             config.get("L", 0),
             "H":             config.get("H", 0),
             "strategy":      config.get("strategy", "mimo"),
-            "training_mode": config.get("training_mode", "pooled"),
+            "training_mode": config.get("training_mode", "per_ticker"),
             "mape":          metrics.get("mape", None),
             "smape":         metrics.get("smape", None),
             "mae":           metrics.get("mae", None),

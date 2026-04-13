@@ -49,7 +49,7 @@ class WindowCache:
         strategy_s = self._sanitize_part(strategy)
 
         step_part = f"_step{step}" if strategy_s == "recursive" else ""
-        return f"{ticker_s}_{regime_s}_L{L}_H{H_total}_{strategy_s}{step_part}_v2".lower()
+        return f"{ticker_s}_{regime_s}_L{L}_H{H_total}_{strategy_s}{step_part}".lower()
 
     def _path(
         self,

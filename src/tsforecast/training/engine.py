@@ -71,7 +71,6 @@ def fit_pytorch(
     checkpoint: Checkpoint,
     max_epochs: int,
     device: torch.device,
-    use_gpu: bool = True,
 ) -> dict:
     """Full training loop for PyTorch models.
 

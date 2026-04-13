@@ -73,6 +73,18 @@ def test_lstm_save_load(tmp_path):
     np.testing.assert_array_almost_equal(model.predict(X_te), loaded.predict(X_te), decimal=5)
 
 
+def test_lstmnet_forward():
+    """_LSTMNet constructor and forward pass with the current 4-arg signature."""
+    import torch
+    from tsforecast.models.lstm import _LSTMNet
+
+    net = _LSTMNet(output_horizon=4, hidden_size=16, num_layers=1, dropout=0.0)
+    x = torch.randn(3, L)       # (B, context_length)
+    out = net(x)                # expected (B, H, 1)
+    assert out.shape == (3, 4, 1)
+    assert torch.isfinite(out).all()
+
+
 # PatchTST smoke test is marked slow -- requires transformers library
 @pytest.mark.slow
 def test_patchtst_smoke(tmp_path):

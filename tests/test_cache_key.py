@@ -53,15 +53,6 @@ def test_cache_key_includes_h_total():
     assert key_h21 != key_h63
 
 
-def test_cache_key_v2_suffix():
-    """Keys must contain v2 to avoid collisions with old cache files."""
-    from tsforecast.data.cache import WindowCache
-
-    cache = WindowCache("data/processed")
-    key = cache.key("AAPL", "bear", 96, 21)
-    assert "v2" in key
-
-
 def test_cache_roundtrip(tmp_path):
     from tsforecast.data.cache import WindowCache
 

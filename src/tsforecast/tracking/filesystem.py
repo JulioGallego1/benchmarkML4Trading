@@ -70,9 +70,6 @@ class RunTracker:
     def save_global_metrics(self, metrics: dict) -> None:
         """Save global run metrics as metrics_global.csv and metrics.json.
 
-        This is the single path for persisting run-level metrics in both
-        pooled and per-ticker training modes.
-
         metrics_global.csv  — human-readable CSV summary.
         metrics.json        — read by reports.py to build summary tables.
         """

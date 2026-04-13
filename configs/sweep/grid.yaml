@@ -20,35 +20,34 @@ strategies:
 
 steps:       # only used when strategy = recursive
   - 16
-  - 32
+  #- 32
 
 training_mode:
-  #- per_ticker
-  - pooled
+  - per_ticker
 
 seeds:
   - 2024
 
 models:
   rf:
-    n_estimators: [150, 200]
+    n_estimators: [200]
     max_depth: [null, 10]
     max_features: ["sqrt"]
-    min_samples_leaf: [1, 5]
+    min_samples_leaf: [1, 2]
 
   lstm:
     hidden_size: [64, 128]
-    num_layers: [ 2]
+    num_layers: [1, 2]
     dropout: [0.1]
     lr: [0.001]
     batch_size: [32]
 
   patchtst:
-    d_model: [64]
+    d_model: [64, 128]
     num_attention_heads: [4, 8]
-    num_hidden_layers: [3]
+    num_hidden_layers: [2, 3]
     patch_length: [16]
     patch_stride: [8]
-    dropout: [0.25]
+    dropout: [0.2]
     lr: [0.0015]
     use_revin: [true]

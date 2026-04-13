@@ -48,7 +48,7 @@ def make_run_id(
     step:
         Block size for recursive strategy (ignored when ``strategy='mimo'``).
     training_mode:
-        Training mode: ``'per_ticker'`` or ``'pooled'``.
+        Training mode string (e.g. ``'per_ticker'``).
     extra_tags:
         Optional list of short strings appended between the training mode and the
         timestamp (e.g. ``['revin']`` or ``['norevin']``).

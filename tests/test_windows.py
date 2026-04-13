@@ -21,11 +21,11 @@ def test_no_overlap_between_x_and_y():
     series, dates = make_series(100)
     L, H = 10, 5
     X, Y, anchors, _ = generate_windows_mimo(series, dates, 0, 100, L, H)
-    for i in range(len(X)):
-        # The last element of X[i] is series[t-1], Y[i][0] is series[t]
-        # Y[i] should not contain any value from X[i]
-        assert not np.any(np.isin(Y[i], X[i])) or True  # Values can repeat by chance; check index alignment instead
-    # Check anchor is last element of X
+    # Verify index alignment: X[i] = series[i:i+L], Y[i] = series[i+L:i+L+H]
+    for i in [0, 1, len(X) // 2, len(X) - 1]:
+        np.testing.assert_array_equal(X[i], series[i:i + L])
+        np.testing.assert_array_equal(Y[i], series[i + L:i + L + H])
+    # Anchor is last element of X
     assert np.allclose(anchors, X[:, -1])
 
 def test_anchor_is_last_context_value():
@@ -40,6 +40,8 @@ def test_empty_when_not_enough_data():
     X, Y, anchors, start_dates = generate_windows_mimo(series, dates, 0, 20, L, H)
     assert X.shape[0] == 0
     assert Y.shape[0] == 0
+    assert anchors.shape[0] == 0
+    assert start_dates.shape[0] == 0
 
 def test_stride():
     series, dates = make_series(100)

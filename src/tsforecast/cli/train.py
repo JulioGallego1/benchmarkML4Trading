@@ -2,7 +2,7 @@
 Main CLI entrypoint for the tsforecast pipeline.
 
 Usage:
-    python -m tsforecast.cli.train --model rf --regime bear --L 96 --H 21 --training-mode pooled
+    python -m tsforecast.cli.train --model rf --regime bear --L 96 --H 21 --training-mode per_ticker
     tsforecast-train --model lstm --regime bull --L 48 --H 63 --training-mode per_ticker
 """
 
@@ -64,14 +64,9 @@ def parse_args():
     )
     parser.add_argument(
         "--training-mode",
-        choices=["pooled", "per_ticker"],
+        choices=["per_ticker"],
         default="per_ticker",
-        help=(
-            "Training mode. "
-            "'pooled': concatenate all ticker windows and train one shared model. "
-            "'per_ticker': train a separate model for each ticker independently. "
-            "(default: per_ticker)"
-        ),
+        help="Training mode. Only 'per_ticker' is supported: train a separate model per ticker. (default: per_ticker)",
     )
     parser.add_argument(
         "--strategy",
@@ -159,17 +154,8 @@ def build_model(
     run_dir: Path,
     strategy: str = "mimo",
     step: int = 16,
-    num_tickers: int = 1,
 ):
-    """Instantiate the requested model using config parameters.
-
-    Parameters
-    ----------
-    num_tickers : int
-        Number of unique tickers seen in pooled mode.  Pass ``1`` (default)
-        for per-ticker mode — neural models will skip the embedding path
-        entirely and RF will not append a ticker-ID column.
-    """
+    """Instantiate the requested model using config parameters."""
     if model_name == "rf":
         from tsforecast.models.rf import RandomForestModel
         return RandomForestModel(
@@ -196,8 +182,6 @@ def build_model(
             random_state=config.get("seed", 2024),
             strategy=strategy,
             step=step,
-            num_tickers=num_tickers,
-            ticker_embedding_dim=config.get("ticker_embedding_dim", 4),
         )
 
     elif model_name == "patchtst":
@@ -223,8 +207,6 @@ def build_model(
             strategy=strategy,
             step=step,
             use_revin=config.get("use_revin", True),
-            num_tickers=num_tickers,
-            ticker_embedding_dim=config.get("ticker_embedding_dim", 4),
         )
 
     else:
@@ -385,142 +367,6 @@ def _aggregate_ticker_metrics(ticker_metrics: list[dict]) -> dict:
         if values:
             result[key] = float(np.mean(values))
     return result
-
-
-def _run_pooled(
-    all_results: list[dict],
-    tracker,
-    model_name: str,
-    config: dict,
-    L: int,
-    H: int,
-    strategy: str,
-    step: int,
-    logger,
-) -> tuple[dict, dict]:
-    """Train one ticker-aware shared model on the concatenation of all ticker windows.
-
-    Each sample carries its ticker's integer ID so the model can condition
-    predictions on asset identity while still sharing the backbone weights
-    across all tickers.
-
-    Returns
-    -------
-    metrics : dict
-        Global test-set metrics.
-    ticker_to_id : dict[str, int]
-        Mapping of ticker name → integer ID used during this run.  Saved in
-        config.yaml so the mapping is reproducible at inference time.
-
-    Saves:
-      runs/<run_id>/model/                    — the shared (ticker-aware) model
-      runs/<run_id>/predictions_detailed.csv  — all tickers concatenated
-      runs/<run_id>/metrics.json              — pooled test-set metrics
-      runs/<run_id>/metrics_global.csv        — same metrics in CSV form
-      runs/<run_id>/tickers/<T>/plot.png      — per-ticker forecast plot
-    """
-    # Build a ticker-integer ID mapping
-
-    tickers_sorted = sorted(r["ticker"] for r in all_results)
-    ticker_to_id: dict[str, int] = {t: i for i, t in enumerate(tickers_sorted)}
-    num_tickers = len(ticker_to_id)
-    logger.info(f"Ticker-ID mapping ({num_tickers} tickers): {ticker_to_id}")
-
-    # Concatenate windows and build matching ticker-ID arrays
-    X_train_all = np.concatenate([r["X_train"] for r in all_results], axis=0)
-    Y_train_all = np.concatenate([r["Y_train"] for r in all_results], axis=0)
-    X_val_all   = np.concatenate([r["X_val"]   for r in all_results], axis=0)
-    Y_val_all   = np.concatenate([r["Y_val"]   for r in all_results], axis=0)
-    X_test_all  = np.concatenate([r["X_test"]  for r in all_results], axis=0)
-    Y_test_all  = np.concatenate([r["Y_test"]  for r in all_results], axis=0)
-    anchors_test_all = np.concatenate([r["anchors_test"] for r in all_results], axis=0)
-    dates_test_all   = np.concatenate([r["dates_test"]   for r in all_results], axis=0)
-
-    def _make_ids(split: str) -> np.ndarray:
-        return np.concatenate(
-            [
-                np.full(r[f"X_{split}"].shape[0], ticker_to_id[r["ticker"]], dtype=np.int64)
-                for r in all_results
-            ]
-        )
-
-    T_train_all = _make_ids("train")
-    T_val_all   = _make_ids("val")
-    T_test_all  = _make_ids("test")
-
-    logger.info(
-        f"Pooled shapes — X_train: {X_train_all.shape}, "
-        f"X_val: {X_val_all.shape}, X_test: {X_test_all.shape}"
-    )
-
-    # Train
-    model = build_model(
-        model_name, config, L, H, tracker.run_dir,
-        strategy=strategy, step=step, num_tickers=num_tickers,
-    )
-    logger.info(
-        f"Training {type(model).__name__} on pooled data "
-        f"({num_tickers} tickers, ticker_embedding_dim="
-        f"{config.get('ticker_embedding_dim', 4)})..."
-    )
-    model.fit(
-        X_train_all, Y_train_all, X_val_all, Y_val_all,
-        ticker_ids_train=T_train_all,
-        ticker_ids_val=T_val_all,
-    )
-    logger.info("Training complete.")
-    if getattr(model, "history", None):
-        plot_training_curves(model.history, save_path=tracker.run_dir / "training_curves.png")
-        logger.info("Training curves saved.")
-
-    y_pred = model.predict(X_test_all, ticker_ids=T_test_all)
-
-    # Per-ticker forecast plots
-    offset = 0
-    for r in all_results:
-        n = r["X_test"].shape[0]
-        ticker = r["ticker"]
-        plot_ticker_forecast(
-            dates=r["dates_test"],
-            y_true=Y_test_all[offset : offset + n],
-            y_pred=y_pred[offset : offset + n],
-            ticker=ticker,
-            save_path=tracker.ticker_plot_path(ticker),
-        )
-        plot_ticker_returns(
-            dates=r["dates_test"],
-            y_true=Y_test_all[offset : offset + n],
-            y_pred=y_pred[offset : offset + n],
-            anchors=r["anchors_test"],
-            ticker=ticker,
-            save_path=tracker.ticker_return_plot_path(ticker),
-        )
-        logger.info(f"  [{ticker}] Forecast and return plots saved.")
-        offset += n
-
-    metrics = {
-        "mae": mae(Y_test_all, y_pred),
-        "rmse": rmse(Y_test_all, y_pred),
-        "mape": mape(Y_test_all, y_pred),
-        "smape": smape(Y_test_all, y_pred),
-        "directional_accuracy": directional_accuracy(
-            Y_test_all, y_pred, anchors_test_all
-        ),
-        "n_tickers_ok": len(all_results),
-        "n_tickers_failed": 0,
-    }
-
-    tracker.save_global_metrics(metrics)
-    tracker.save_predictions(
-        dates=dates_test_all,
-        ticker="all",
-        y_true=Y_test_all,
-        y_pred=y_pred,
-        anchors=anchors_test_all,
-    )
-    tracker.save_model(model)
-
-    return metrics, ticker_to_id
 
 
 def _run_per_ticker(
@@ -719,22 +565,14 @@ def main():
     logger.info(f"Preprocessed {len(all_results)} ticker(s) successfully.")
 
     # Training and evaluation
-    if training_mode == "pooled":
-        global_metrics, ticker_to_id = _run_pooled(
-            all_results, tracker, model_name, config, L, H, strategy, step, logger
-        )
-        failed_tickers = failed_load
+    global_metrics, failed_train = _run_per_ticker(
+        all_results, tracker, model_name, config, L, H, strategy, step, logger
+    )
+    failed_tickers = failed_load + failed_train
 
-    else:  # per_ticker
-        global_metrics, failed_train = _run_per_ticker(
-            all_results, tracker, model_name, config, L, H, strategy, step, logger
-        )
-        ticker_to_id = {}
-        failed_tickers = failed_load + failed_train
-
-        if not global_metrics:
-            logger.warning("No tickers completed training successfully. No global metrics to save.")
-            sys.exit(1)
+    if not global_metrics:
+        logger.warning("No tickers completed training successfully. No global metrics to save.")
+        sys.exit(1)
 
     if failed_tickers:
         logger.warning(f"Failed tickers ({len(failed_tickers)}): {failed_tickers}")
@@ -752,7 +590,6 @@ def main():
         "training_mode": training_mode,
         "tickers_ok": global_metrics.get("n_tickers_ok", 0),
         "tickers_failed": global_metrics.get("n_tickers_failed", 0),
-        "ticker_to_id": ticker_to_id,
     }
     tracker.save_config(full_config)
 

@@ -1,9 +1,12 @@
 regimes:
   bear:
     test_start: "2022-03-11"
-    val_days: 126
-    test_days: 126
+    val_days: 252
+    test_days: 252
   bull:
     test_start: "2023-01-06"
-    val_days: 252
-    test_days: 126
+    val_days: 294
+    test_days: 252
+
+## marzo 2017 -> 4 años training bear
+##enero18 -> 4 años training para bull
