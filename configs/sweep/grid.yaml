@@ -6,8 +6,8 @@ regimes:
 
 horizons:
   #- 10    # 2w
-  - 21    # 1m
-  #- 63    # 3m
+  #- 21    # 1m
+  - 63    # 3m
 
 context_lengths:
   - 32
@@ -19,8 +19,8 @@ strategies:
   - recursive
 
 steps:       # only used when strategy = recursive
-  - 1
   - 3
+  - 12
   #- 16
   #- 32
 
