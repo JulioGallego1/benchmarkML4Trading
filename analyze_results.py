@@ -153,7 +153,9 @@ def load_all_runs(runs_dir: str = "runs") -> pd.DataFrame:
             "L":             config.get("L", 0),
             "H":             config.get("H", 0),
             "strategy":      config.get("strategy", "mimo"),
-            "training_mode": config.get("training_mode", "per_ticker"),
+            "patch_length":  config.get("patch_length", None),
+            "rec_step":      config.get("step", 0) or 0,
+            "use_revin":     config.get("use_revin", False),
             "mape":          metrics.get("mape", None),
             "smape":         metrics.get("smape", None),
             "mae":           metrics.get("mae", None),
@@ -178,6 +180,20 @@ def get_color(family: str) -> str:
 
 def short_family_label(family: str) -> str:
     return FAMILY_LABELS.get(family, family)
+
+
+def variant_label(row) -> str:
+    """Compact description of the hyperparameter variant within a family."""
+    parts = [f"L={int(row['L'])}"]
+    if row.get("patch_length") is not None and not (
+        isinstance(row["patch_length"], float) and np.isnan(row["patch_length"])
+    ):
+        parts.append(f"pl={int(row['patch_length'])}")
+    if row.get("rec_step", 0):
+        parts.append(f"stp={int(row['rec_step'])}")
+    if row.get("use_revin", False):
+        parts.append("revin")
+    return ", ".join(parts)
 
 
 # ── Chart helpers ─────────────────────────────────────────────────────────────
@@ -224,8 +240,8 @@ def plot_bar_comparison(data, metric, title, ylabel, save_path, lower_is_better=
 def plot_metrics_table(data, title, save_path):
     if data.empty:
         return
-    cols     = ["family", "mape", "directional_accuracy", "mae", "rmse", "training_mode", "run_id"]
-    headers  = ["Family", "MAPE", "Dir.Acc.", "MAE", "RMSE", "Mode", "Run ID"]
+    cols     = ["family", "mape", "directional_accuracy", "mae", "rmse", "run_id"]
+    headers  = ["Family", "MAPE", "Dir.Acc.", "MAE", "RMSE", "Run ID"]
     available = [c for c in cols if c in data.columns]
 
     display_data = []
@@ -411,6 +427,86 @@ def plot_lines_dual_regime(df, metric, title, ylabel, save_path, lower_is_better
     fig.suptitle(title, fontsize=15, fontweight="bold", color=TEXT_COLOR, y=1.02)
     fig.tight_layout()
     fig.subplots_adjust(bottom=0.18)
+    fig.savefig(save_path, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_final_comparison(df, regime, save_path):
+    """
+    Final comparative chart: two panels (MAPE | Directional Accuracy),
+    one line per family, showing the best single run at each horizon.
+    Each data point is annotated with the winning variant's key params.
+    """
+    subset = df[df["regime"] == regime].copy()
+    if subset.empty:
+        return
+
+    families = [f for f in FAMILY_ORDER if f in subset["family"].unique()]
+    families += [f for f in subset["family"].unique() if f not in FAMILY_ORDER]
+
+    fig, axes = plt.subplots(1, 2, figsize=(20, 7))
+
+    metrics_cfg = [
+        ("mape",                 True,  "MAPE",               "lower = better"),
+        ("directional_accuracy", False, "Directional Accuracy","higher = better"),
+    ]
+
+    for ax, (metric, lower_is_better, ylabel, hint) in zip(axes, metrics_cfg):
+        valid = subset.dropna(subset=[metric])
+        if valid.empty:
+            ax.set_title(f"{ylabel} — no data")
+            continue
+
+        if lower_is_better:
+            best_idx = valid.groupby(["family", "H"])[metric].idxmin()
+        else:
+            best_idx = valid.groupby(["family", "H"])[metric].idxmax()
+        best     = valid.loc[best_idx]
+        horizons = sorted(best["H"].unique())
+
+        for family in families:
+            fam_data = best[best["family"] == family].sort_values("H")
+            if fam_data.empty:
+                continue
+            h_vals = fam_data["H"].tolist()
+            m_vals = fam_data[metric].tolist()
+            color  = get_color(family)
+            marker = FAMILY_MARKERS.get(family, "o")
+            label  = FAMILY_LABELS.get(family, family)
+
+            ax.plot(h_vals, m_vals, color=color, marker=marker, markersize=9,
+                    linewidth=2.4, label=label, zorder=3)
+            for h, m, (_, row) in zip(h_vals, m_vals, fam_data.iterrows()):
+                vl = variant_label(row)
+                ax.annotate(
+                    f"{m:.4f}\n({vl})",
+                    (h, m),
+                    textcoords="offset points",
+                    xytext=(0, 12),
+                    ha="center",
+                    fontsize=6.5,
+                    color=color,
+                    fontweight="bold",
+                )
+
+        ax.set_xticks(horizons)
+        ax.set_xticklabels([str(h) for h in horizons])
+        ax.set_xlabel("Prediction Horizon (H)", fontsize=12)
+        ax.set_ylabel(ylabel, fontsize=12)
+        ax.set_title(f"{ylabel}\n({hint})", fontsize=13, fontweight="bold",
+                     color=TEXT_COLOR)
+        ax.legend(loc="best", fontsize=8.5, framealpha=0.9,
+                  edgecolor="#CCCCCC", fancybox=True)
+        ax.grid(True, alpha=0.3)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+
+    regime_label = "Bear Market (2022)" if regime == "bear" else "Bull Market (2023)"
+    fig.suptitle(
+        f"Final Comparison — Best Run per Family\n{regime_label}",
+        fontsize=15, fontweight="bold", color=TEXT_COLOR, y=1.02,
+    )
+    fig.tight_layout()
     fig.savefig(save_path, bbox_inches="tight")
     plt.close(fig)
 
@@ -640,6 +736,12 @@ def main():
     plot_lines_dual_regime(df, "directional_accuracy",
         "Directional Accuracy: Model Comparison across Regimes",
         "Directional Accuracy", lines_dir / "da_dual.png", lower_is_better=False)
+
+    # ── Final comparative: best run per family × horizon (MAPE + DA together) ─
+    for regime in sorted(df["regime"].unique()):
+        plot_final_comparison(
+            df, regime, lines_dir / f"final_comparison_{regime}.png"
+        )
 
     # ── Collect best run dirs ─────────────────────────────────────────────────
     selected_dir = out / "best_selected"
